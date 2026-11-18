@@ -9,6 +9,10 @@ declare const styles: {
   readonly "row": string;
   readonly "text": string;
   readonly "label": string;
+  readonly "balanceCell": string;
+  readonly "balanceAmount": string;
+  readonly "balanceActions": string;
+  readonly "balanceLink": string;
   readonly "uploadButton": string;
   readonly "locationCell": string;
   readonly "locationSelectors": string;
@@ -23,6 +27,8 @@ declare const styles: {
   readonly "error": string;
   readonly "success": string;
   readonly "apiKey": string;
+  readonly "apiKeyNotice": string;
+  readonly "apiKeyNoticeIcon": string;
   readonly "apiKeyHeading": string;
   readonly "apiKeyLink": string;
   readonly "apiKeyFeedback": string;

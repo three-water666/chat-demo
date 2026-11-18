@@ -81,6 +81,30 @@ export const loadSessionSummaries = async (): Promise<SessionSummary[]> =>
 export const loadSession = async (id: string): Promise<Session | undefined> =>
   (await getDB()).get('sessions', id)
 
+/** 逐条读取本地会话，避免一次把整份历史加载到内存。 */
+export const visitStoredSessions = async (
+  visit: (session: Session) => void,
+  signal: AbortSignal
+): Promise<void> => {
+  const db = await getDB()
+  if (signal.aborted) {
+    return
+  }
+  const tx = db.transaction('sessions', 'readonly')
+  await Promise.all([
+    (async () => {
+      for (
+        let cursor = await tx.store.openCursor();
+        cursor && !signal.aborted;
+        cursor = await cursor.continue()
+      ) {
+        visit(cursor.value)
+      }
+    })(),
+    tx.done,
+  ])
+}
+
 export const saveSession = async (session: Session, files: StoredFile[] = []): Promise<void> => {
   const summary = storedSummary(session)
   const tx = (await getDB()).transaction(['sessions', 'sessionSummaries', 'files'], 'readwrite')

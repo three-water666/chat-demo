@@ -9,7 +9,6 @@ export const CollapsedSider = () => {
   return (
     <IconButton
       size="m"
-      tone="primary"
       icon={<IconPanelLeftOutline16 />}
       tooltip={t('expandSiderbarButton')}
       tooltipPlacement="bottom"

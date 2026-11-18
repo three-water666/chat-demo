@@ -6,16 +6,19 @@ import {
   IconDownloadOutline16,
   IconFollowsystemOutline16,
   IconLightOutline16,
+  IconLinkOutline16,
+  IconRefreshOutline16,
   IconSettingsOutline16,
   IconUploadOutline14,
 } from '../base/icons.js'
+import { useAccountBalance } from '../../services/accountBalance.js'
+import { TOP_UP_URL } from '../../services/api/client.js'
 import {
   BackupError,
   clearHistory,
   exportHistory,
   importHistory,
 } from '../../services/chat/backup.js'
-import { useIsMobile } from '../../app/viewport.js'
 import { useChatStore } from '../../services/chat/store.js'
 import { regionCodes, getRegionName, provinces } from '../../services/location.js'
 import {
@@ -29,15 +32,23 @@ import {
 } from '../../services/settings.js'
 import { useTranslate, type TranslationKey, type TranslationMessage } from '../../i18n/index.js'
 import { Button } from '../base/Button.js'
+import buttonStyles from '../base/Button.module.css'
 import { Modal } from '../base/Modal.js'
 import { Select } from '../base/Select.js'
 import { showToast } from '../base/toastState.js'
-import { ApiKeyConfirm, ApiKeyField, useApiKeyEditor } from './ApiKeyField.js'
-import { closeSettings, useSettingsDialog, type SettingsSection } from './settingsDialogState.js'
+import { ApiKeyField, useApiKeyEditor } from './ApiKeyField.js'
+import { PlatformLink } from './PlatformLink.js'
+import {
+  closeSettings,
+  openSettings,
+  useSettingsDialog,
+  type SettingsSection,
+} from './settingsDialogState.js'
+import { useBalanceRefresh } from './useBalanceRefresh.js'
 import styles from './Settings.module.css'
 
 /**
- * 设置弹窗：分「通用设置」（主题、语言、朗读音色、位置）与「数据管理」（API Key、导入、导出、删除）。
+ * 设置弹窗：API 配置、通用设置与数据管理。
  * 桌面端为居中弹窗、左侧导航；移动端为底部弹层、导航横排在内容上方
  */
 export const SettingsDialog = () => {
@@ -46,6 +57,11 @@ export const SettingsDialog = () => {
 }
 
 const sections: { value: SettingsSection; label: TranslationKey; icon: ReactNode }[] = [
+  {
+    value: 'api',
+    label: 'settingDialogAsideApiOptionLabel',
+    icon: <IconLinkOutline16 />,
+  },
   {
     value: 'general',
     label: 'settingDialogAsideGeneralOptionLabel',
@@ -56,9 +72,7 @@ const sections: { value: SettingsSection; label: TranslationKey; icon: ReactNode
 
 const SettingsContent = () => {
   const t = useTranslate()
-  const isMobile = useIsMobile()
-  // 打开时按调用方指定的分组选中，之后在弹窗内切换
-  const [section, setSection] = useState(() => useSettingsDialog.getState().section)
+  const section = useSettingsDialog((state) => state.section)
   // 切换分组不丢失正在输入的 API Key 与导入状态
   const apiKeyEditor = useApiKeyEditor()
   const historyImport = useHistoryImport()
@@ -86,15 +100,20 @@ const SettingsContent = () => {
               role="tab"
               aria-selected={section === item.value}
               className={clsx(styles.navItem, section === item.value && styles.navItemActive)}
-              onClick={() => setSection(item.value)}
+              onClick={() => openSettings(item.value)}
             >
               {item.icon}
               {t(item.label)}
             </button>
           ))}
         </div>
-        <div role="tabpanel" className={styles.content}>
-          {section === 'general' ? (
+        <div key={section} role="tabpanel" className={styles.content}>
+          {section === 'api' ? (
+            <>
+              <ApiKeyField editor={apiKeyEditor} />
+              <BalanceSetting />
+            </>
+          ) : section === 'general' ? (
             <>
               <ThemeSetting />
               <LocaleSetting />
@@ -103,7 +122,6 @@ const SettingsContent = () => {
             </>
           ) : (
             <>
-              <ApiKeyField editor={apiKeyEditor} />
               <ImportHistory historyImport={historyImport} disabled={historyBusy} />
               <ExportHistory disabled={historyBusy} />
               <SettingCell
@@ -121,7 +139,6 @@ const SettingsContent = () => {
                   </Button>
                 }
               />
-              {isMobile ? <ApiKeyConfirm editor={apiKeyEditor} /> : null}
             </>
           )}
         </div>
@@ -203,6 +220,74 @@ const useHistoryDelete = () => {
     },
     confirm,
   }
+}
+
+const BalanceSetting = () => {
+  const t = useTranslate()
+  const apiKey = useSettings((state) => state.apiKey)
+  const { balances, error, loading, refreshBlocked } = useAccountBalance()
+  const { onTopUp, refresh } = useBalanceRefresh(apiKey, loading || refreshBlocked)
+  const linkClassName = clsx(
+    buttonStyles.button,
+    buttonStyles.m,
+    styles.cellButton,
+    styles.balanceLink
+  )
+
+  const amount = balances
+    ?.map(({ currency, total_balance }) => `${currency === 'CNY' ? '¥' : 'US$'}${total_balance}`)
+    .join(' · ')
+  const errorKey =
+    error === 'unauthorized'
+      ? 'replyInvalidApiKey'
+      : error === 'rateLimited'
+        ? 'replyRateLimited'
+        : 'balanceLoadFailed'
+
+  return (
+    <SettingCell
+      label={t('settingsBalance')}
+      className={styles.balanceCell}
+      status={null}
+      description={
+        <div role="status">
+          {!apiKey ? t('balanceNeedsApiKey') : null}
+          {loading && !amount ? t('balanceLoading') : null}
+          {amount ? <div className={styles.balanceAmount}>{amount}</div> : null}
+          {balances?.length === 0 && !loading && !error ? t('balanceEmpty') : null}
+          {error ? <div className={styles.error}>{t(errorKey)}</div> : null}
+        </div>
+      }
+      action={
+        <div className={styles.balanceActions}>
+          <Button
+            variant="outlined"
+            size="m"
+            className={styles.cellButton}
+            disabled={!apiKey || loading || refreshBlocked}
+            aria-busy={loading}
+            onClick={refresh}
+          >
+            <IconRefreshOutline16 />
+            {t('balanceRefresh')}
+          </Button>
+          <PlatformLink
+            className={clsx(linkClassName, buttonStyles.outlined)}
+            href="https://platform.deepseek.com/usage"
+          >
+            {t('viewApiUsage')}
+          </PlatformLink>
+          <PlatformLink
+            className={clsx(linkClassName, buttonStyles.primary)}
+            href={TOP_UP_URL}
+            onOpen={onTopUp}
+          >
+            {t('topUp')}
+          </PlatformLink>
+        </div>
+      }
+    />
+  )
 }
 
 const LocationSetting = () => {
@@ -413,7 +498,7 @@ const SettingCell = ({
   className,
 }: {
   label: string
-  description?: string
+  description?: ReactNode
   status: Status
   action: ReactNode
   className?: string

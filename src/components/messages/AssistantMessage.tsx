@@ -2,6 +2,7 @@ import { useTranslate } from '../../i18n/index.js'
 import clsx from 'clsx'
 import { memo } from 'react'
 import { IconRefreshOutline16, IconWarningOutline16 } from '../base/icons.js'
+import { TOP_UP_URL } from '../../services/api/client.js'
 import { describeReply } from '../../services/chat/describe.js'
 import { canContinueReply } from '../../services/chat/reply.js'
 import { continueReply, regenerateReply } from '../../services/chat/store.js'
@@ -23,8 +24,6 @@ import {
   type SelectMessageVersion,
 } from './BranchSwitcher.js'
 import styles from './AssistantMessage.module.css'
-
-const TOP_UP_URL = 'https://platform.deepseek.com/top_up'
 
 export const AssistantMessage = memo(function AssistantMessage({
   sessionId,
@@ -102,7 +101,7 @@ export const AssistantMessage = memo(function AssistantMessage({
                 <button
                   type="button"
                   className={styles.noticeAction}
-                  onClick={() => openSettings('data')}
+                  onClick={() => openSettings('api')}
                 >
                   {t('changeApiKey')}
                 </button>

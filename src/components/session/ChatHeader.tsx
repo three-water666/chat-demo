@@ -75,7 +75,6 @@ export const ChatHeader = ({
       {isMobile ? (
         <IconButton
           size="xl"
-          tone="primary"
           icon={<IconMenuOutline20 />}
           aria-label={t('expandSiderbarButton')}
           onClick={openMobileSider}

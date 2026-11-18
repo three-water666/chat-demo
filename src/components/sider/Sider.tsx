@@ -1,7 +1,12 @@
 import clsx from 'clsx'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
-import { IconPanelLeftOutline16, IconSettingsOutline16, NewChatIcon } from '../base/icons.js'
+import {
+  IconPanelLeftOutline16,
+  IconSearchOutline16,
+  IconSettingsOutline16,
+  NewChatIcon,
+} from '../base/icons.js'
 import { setSiderCollapsed } from '../../services/settings.js'
 import { groupSessions } from '../../services/chat/sessionGroups.js'
 import { newChat, removeSession, useChatStore } from '../../services/chat/store.js'
@@ -13,6 +18,7 @@ import { showToast } from '../base/toastState.js'
 import { openSettings } from '../settings/settingsDialogState.js'
 import { closeMobileSider, useMobileSider } from './mobileSiderState.js'
 import { SessionItem } from './SessionItem.js'
+import { SessionSearchDialog } from './SessionSearchDialog.js'
 import styles from './Sider.module.css'
 
 /** 展开的侧边栏：顶部操作与按时间分组的会话列表；移动端放在抽屉里。 */
@@ -20,11 +26,14 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
   const t = useTranslate()
   const sessions = useChatStore((state) => state.sessions)
   const activeId = useChatStore((state) => state.activeId)
+  const searchDisabled = useChatStore((state) => !state.ready || state.importingHistory)
   const [now, setNow] = useState(Date.now)
   const groups = useMemo(() => groupSessions(sessions, now, t), [sessions, now, t])
   const [deleting, setDeleting] = useState<SessionSummary | null>(null)
   const [deletePending, setDeletePending] = useState(false)
-  const actionSize = mobile ? 'xl' : 'm'
+  const [searchOpen, setSearchOpen] = useState(false)
+  const searchButtonRef = useRef<HTMLButtonElement | null>(null)
+  const actionSize = mobile ? 'xl' : 'xs'
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>
@@ -67,7 +76,6 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
         </Button>
         <IconButton
           size={actionSize}
-          tone="primary"
           icon={<IconSettingsOutline16 />}
           tooltip={t('settings')}
           tooltipPlacement="bottom"
@@ -78,7 +86,18 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
         />
         <IconButton
           size={actionSize}
-          tone="primary"
+          icon={<IconSearchOutline16 />}
+          tooltip={t('searchChats')}
+          tooltipPlacement="bottom"
+          aria-haspopup="dialog"
+          disabled={searchDisabled}
+          onClick={(event) => {
+            searchButtonRef.current = event.currentTarget
+            setSearchOpen(true)
+          }}
+        />
+        <IconButton
+          size={actionSize}
           icon={<IconPanelLeftOutline16 />}
           tooltip={t('collapseSiderbarButton')}
           tooltipPlacement="bottom"
@@ -103,6 +122,14 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
           ))}
         </div>
       </div>
+      {searchOpen ? (
+        <SessionSearchDialog
+          onClose={() => {
+            setSearchOpen(false)
+            searchButtonRef.current?.focus()
+          }}
+        />
+      ) : null}
       {deleting ? (
         <Modal
           title={t('deleteSessionModalContentTitle')}

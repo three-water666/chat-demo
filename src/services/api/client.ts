@@ -11,6 +11,7 @@ import type {
 
 /** 构建期 API 地址，默认 https://api.deepseek.com；本地开发支持开发服务器代理 */
 export const API_ORIGIN = __API_ORIGIN__
+export const TOP_UP_URL = 'https://platform.deepseek.com/top_up'
 /** Anthropic 兼容接口的前缀 */
 const ANTHROPIC_BASE_URL = `${API_ORIGIN}/anthropic/v1`
 /** 引用 Files API 上传的图片、调用 Anthropic 兼容 Files API 时必须携带 */
@@ -96,6 +97,44 @@ export const verifyApiKey = async (apiKey: string, signal?: AbortSignal): Promis
     headers: { Authorization: `Bearer ${apiKey}` },
     signal,
   })
+}
+
+export type AccountBalance = {
+  currency: 'CNY' | 'USD'
+  total_balance: string
+}
+
+const isAccountBalance = (value: unknown): value is AccountBalance =>
+  typeof value === 'object' &&
+  value !== null &&
+  'currency' in value &&
+  (value.currency === 'CNY' || value.currency === 'USD') &&
+  'total_balance' in value &&
+  typeof value.total_balance === 'string' &&
+  /^-?\d+(?:\.\d+)?$/.test(value.total_balance)
+
+/** 查询当前 API Key 所属账号的各币种总余额。 */
+export const getAccountBalances = async (
+  apiKey: string,
+  signal: AbortSignal
+): Promise<AccountBalance[]> => {
+  const response = await request(`${API_ORIGIN}/user/balance`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${apiKey}` },
+    cache: 'no-store',
+    signal,
+  })
+  const body: unknown = await response.json()
+  if (
+    typeof body !== 'object' ||
+    body === null ||
+    !('balance_infos' in body) ||
+    !Array.isArray(body.balance_infos) ||
+    !body.balance_infos.every(isAccountBalance)
+  ) {
+    throw new ApiError('protocol', 'Invalid account balance response')
+  }
+  return body.balance_infos
 }
 
 /**

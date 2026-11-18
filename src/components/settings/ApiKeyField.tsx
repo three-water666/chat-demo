@@ -1,14 +1,15 @@
 import clsx from 'clsx'
 import { useState } from 'react'
-import { IconEditOutline16 } from '../base/icons.js'
+import { IconEditOutline16, IconWarningOutline16 } from '../base/icons.js'
 import { useSettings } from '../../services/settings.js'
 import { useIsMobile } from '../../app/viewport.js'
 import { IconButton } from '../base/IconButton.js'
 import { useApiKeyForm } from './useApiKeyForm.js'
 import { useTranslate } from '../../i18n/index.js'
+import { PlatformLink } from './PlatformLink.js'
 import styles from './Settings.module.css'
 
-/** API Key 的编辑状态：输入框与移动端底部的「确定」按钮共用 */
+/** API Key 的编辑状态在设置分组之间保留。 */
 export const useApiKeyEditor = () => {
   const apiKey = useSettings((state) => state.apiKey)
   const [editing, setEditing] = useState(false)
@@ -28,16 +29,20 @@ export const ApiKeyField = ({ editor }: { editor: ApiKeyEditor }) => {
   return (
     <div className={styles.cell}>
       <div className={styles.apiKey}>
+        <aside className={styles.apiKeyNotice}>
+          <span className={styles.apiKeyNoticeIcon} aria-hidden="true">
+            <IconWarningOutline16 />
+          </span>
+          <div>
+            <strong>{t('apiKeyNoticeTitle')}</strong>
+            <p>{t('apiKeyNoticeDescription')}</p>
+          </div>
+        </aside>
         <div className={styles.apiKeyHeading}>
           <div className={styles.label}>{t('apiKeyStart')}</div>
-          <a
-            className={styles.apiKeyLink}
-            href="https://platform.deepseek.com/usage"
-            target="_blank"
-            rel="noreferrer"
-          >
+          <PlatformLink className={styles.apiKeyLink} href="https://platform.deepseek.com/api_keys">
             {t('getApiKey')}
-          </a>
+          </PlatformLink>
         </div>
         {apiKey && !editing ? (
           <div className={styles.apiKeySaved}>
@@ -96,12 +101,13 @@ export const ApiKeyField = ({ editor }: { editor: ApiKeyEditor }) => {
           {feedback}
         </div>
       </div>
+      {isMobile ? <ApiKeyConfirm editor={editor} /> : null}
     </div>
   )
 }
 
-/** 移动端：输入 API Key 时在选项下方显示整行「确定」 */
-export const ApiKeyConfirm = ({ editor: { showInput, form } }: { editor: ApiKeyEditor }) => {
+/** 移动端：在 API Key 输入框下方显示「确定」。 */
+const ApiKeyConfirm = ({ editor: { showInput, form } }: { editor: ApiKeyEditor }) => {
   const t = useTranslate()
   return showInput && form.value.trim() ? (
     <button
