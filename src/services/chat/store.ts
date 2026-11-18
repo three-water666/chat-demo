@@ -2,10 +2,22 @@ import { create } from 'zustand'
 import { createId } from '../../utils/id.js'
 import { ApiError, streamMessage } from '../api/client.js'
 import type { ChatModel, CreateMessageRequest } from '../api/types.js'
-import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
+import {
+  extractFileIds,
+  getFileErrorCode,
+  isContextLimitError,
+  isRetryableApiError,
+} from '../api/errors.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
 import { useSettings } from '../settings.js'
 import { appendBranch, getVisibleMessages, normalizeSession, selectVersion } from './branches.js'
+import {
+  estimateFlashTokenCost,
+  planCompaction,
+  selectConversationContext,
+  summarizeContext,
+  type RecalledFile,
+} from './compaction.js'
 import * as db from './db.js'
 import {
   clearAllDrafts,
@@ -73,6 +85,8 @@ type ChatState = {
   activeId: string | null
   /** 正在生成回复的会话 */
   streaming: Record<string, AbortController>
+  /** 正在整理较早历史的回复 ID。 */
+  compacting: Record<string, string>
 }
 
 export const useChatStore = create<ChatState>(() => ({
@@ -85,6 +99,7 @@ export const useChatStore = create<ChatState>(() => ({
   sessionSaveErrors: {},
   activeId: null,
   streaming: {},
+  compacting: {},
 }))
 
 const { getState: get, setState: set } = useChatStore
@@ -749,7 +764,12 @@ export const retryUpload = (sessionId: string, messageId: string) => {
   void streamReply(sessionId, reply, { history: path.slice(0, index - 1), question })
 }
 
-type Request = { history: Message[]; question: UserMessage; prefix?: AssistantMessage }
+type Request = {
+  history: Message[]
+  question: UserMessage
+  prefix?: AssistantMessage
+  recalledFiles?: ReadonlyMap<string, RecalledFile[]>
+}
 
 /** 把补传得到的 serverId 写回会话里所有引用同一附件的消息（编辑、重新生成会共用附件） */
 const saveServerIds = (sessionId: string, serverIds: Map<string, string>) => {
@@ -800,10 +820,25 @@ const refreshRequest = (sessionId: string, request: Request): Request => {
   const byId = new Map(session.messages.map((message) => [message.id, message]))
   const pick = <T extends Message>(message: T): T =>
     (byId.get(message.id) as T | undefined) ?? message
+  const pickUser = (message: UserMessage): UserMessage => {
+    const current = pick(message)
+    const recalled = request.recalledFiles?.get(message.id)
+    if (!recalled?.length) {
+      return current
+    }
+    const files = recalled.flatMap(({ sourceQuestionId, file }) => {
+      const source = byId.get(sourceQuestionId)
+      const attachment = source?.role === 'user' && source.files.find(({ id }) => id === file.id)
+      return attachment ? [attachment] : []
+    })
+    return { ...current, files: [...current.files, ...files] }
+  }
   return {
-    history: request.history.map(pick),
-    question: pick(request.question),
-    prefix: request.prefix,
+    ...request,
+    history: request.history.map((message) =>
+      message.role === 'user' ? pickUser(message) : pick(message)
+    ),
+    question: pickUser(request.question),
   }
 }
 
@@ -814,6 +849,7 @@ const refreshRequest = (sessionId: string, request: Request): Request => {
  *   失败静默跳过，该附件不进入本次请求，下次发送时再试。
  */
 const prepareFiles = async (sessionId: string, request: Request, signal: AbortSignal) => {
+  signal.throwIfAborted()
   const epoch = historyEpoch
   // 服务端判定 file_id 失效时会清掉会话里的 serverId，先用最新消息替换请求快照，
   // 否则快照里仍是旧 id，补传会直接复用它。
@@ -865,14 +901,7 @@ const prepareFiles = async (sessionId: string, request: Request, signal: AbortSi
   }
 
   // 用补齐后的会话重新取历史与提问，保证请求里都是 serverId
-  const session = getSession(sessionId)
-  const resolve = <T extends Message>(message: T): T =>
-    (session?.messages.find((m) => m.id === message.id) as T | undefined) ?? message
-  return {
-    history: request.history.map(resolve),
-    question: resolve(request.question),
-    prefix: request.prefix,
-  }
+  return refreshRequest(sessionId, request)
 }
 
 /** 本次请求实际会用到的服务端 file_id */
@@ -974,19 +1003,85 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
   }
   streamFlushes.set(sessionId, flush)
 
+  let context = selectConversationContext(
+    request.history,
+    request.question,
+    getSession(sessionId)?.contextSummaries,
+    request.prefix ? (request.prefix.contextSummaryId ?? null) : undefined
+  )
+  const compact = async (force: boolean): Promise<boolean> => {
+    const rounds = planCompaction(context, request.question, request.prefix, force)
+    const throughReplyId = rounds.at(-1)?.[1].id
+    if (!throughReplyId) {
+      return false
+    }
+    const existing = getSession(sessionId)?.contextSummaries?.find(
+      (summary) => summary.throughReplyId === throughReplyId
+    )
+    if (existing) {
+      context = selectConversationContext(request.history, request.question, [existing])
+      return true
+    }
+    set((state) => ({ compacting: { ...state.compacting, [sessionId]: initial.id } }))
+    try {
+      const summary = await summarizeContext(
+        useSettings.getState().apiKey ?? '',
+        context.summary,
+        rounds,
+        controller.signal
+      )
+      controller.signal.throwIfAborted()
+      context = selectConversationContext(request.history, request.question, [summary])
+      updateSession(sessionId, (session) => ({
+        ...session,
+        contextSummaries: [...(session.contextSummaries ?? []), summary],
+      }))
+      persist(sessionId)
+      return true
+    } catch {
+      // 继续使用原上下文。若已经收到超限错误，调用方会展示该错误。
+      return false
+    } finally {
+      set((state) => ({
+        compacting: Object.fromEntries(
+          Object.entries(state.compacting).filter(([id]) => id !== sessionId)
+        ),
+      }))
+    }
+  }
+
+  let planInitialContext = true
+  let retriedContext = false
+  let fileRetries = 0
   try {
-    for (let attempt = 0; ; attempt += 1) {
+    for (;;) {
       /** 附件补齐前出错属于上传失败，请求还没有发出 */
-      let preparing = true
+      let preparing = false
       let receivedContent = false
+      let prepared: Request | undefined
       try {
-        const prepared = await prepareFiles(sessionId, request, controller.signal)
+        if (planInitialContext) {
+          planInitialContext = false
+          await compact(false)
+        }
+        controller.signal.throwIfAborted()
+        preparing = true
+        prepared = await prepareFiles(
+          sessionId,
+          { ...request, history: context.history, recalledFiles: context.recalledFiles },
+          controller.signal
+        )
         preparing = false
         // 附件就绪后获取本轮信息；续写沿用原回答快照，重新生成的快照独立保存。
         const latestReminder = prepared.prefix
           ? prepared.prefix.latestReminder
           : createLatestReminder(useSettings.getState())
-        reply = { ...reply, latestReminder }
+        reply = {
+          ...reply,
+          latestReminder,
+          contextSummaryId: context.summary?.throughReplyId,
+          estimatedTokenCostCny: undefined,
+        }
         updateReply(sessionId, reply)
         persist(sessionId)
         const messages = toRequestMessages(
@@ -994,7 +1089,8 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           prepared.question,
           prepared.prefix,
           initial.thinking ?? false,
-          latestReminder
+          latestReminder,
+          context.summary?.text
         )
         const events = streamMessage(
           useSettings.getState().apiKey ?? '',
@@ -1025,6 +1121,14 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
             titleRequests.delete(controller)
           }
           reply = applyEvent(reply, event, Date.now(), blockIndexes)
+          if (
+            event.type === 'message_delta' &&
+            event.usage &&
+            context.summary &&
+            (initial.model ?? MODEL) === MODEL
+          ) {
+            reply = { ...reply, estimatedTokenCostCny: estimateFlashTokenCost(event.usage) }
+          }
           if (document.visibilityState === 'hidden') {
             flush()
           } else {
@@ -1047,13 +1151,25 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           })
           break
         }
+        if (!receivedContent && !retriedContext && isContextLimitError(error)) {
+          retriedContext = true
+          if (await compact(true)) {
+            continue
+          }
+          if (controller.signal.aborted) {
+            reply = settleReply(reply, 'stopped', Date.now())
+            break
+          }
+        }
         // 附件失效：重新补传后重发。收到过内容块（含丢弃的客户端工具）后不自动重发。
         if (
-          attempt < FILE_RETRY_LIMIT &&
+          fileRetries < FILE_RETRY_LIMIT &&
           !receivedContent &&
-          reuploadInvalidatedFiles(sessionId, request, error)
+          prepared &&
+          reuploadInvalidatedFiles(sessionId, prepared, error)
         ) {
-          await waitForRetry(attempt, controller.signal)
+          await waitForRetry(fileRetries, controller.signal)
+          fileRetries++
           if (controller.signal.aborted) {
             reply = settleReply(reply, 'stopped', Date.now())
             break

@@ -71,6 +71,18 @@ export type ReplyBlock = ThinkingPart | TextPart | ServerToolBlock
  */
 export type ReplyStatus = 'pending' | 'streaming' | 'done' | 'stopped' | 'error'
 
+/** 用官方公布的峰谷两档单价估算模型 token 费用，单位为人民币元。 */
+export type TokenCostEstimate = { offPeak: number; peak: number }
+
+export type ContextSummary = {
+  /** 被摘要覆盖的最后一个回复。该回复的祖先确定了摘要所属的分支前缀。 */
+  throughReplyId: string
+  text: string
+  /** 生成这份摘要的用量。分批压缩时为各批次之和。 */
+  usage?: MessageUsage
+  estimatedTokenCostCny?: TokenCostEstimate
+}
+
 export type AssistantMessage = MessageBranch & {
   id: string
   role: 'assistant'
@@ -92,6 +104,9 @@ export type AssistantMessage = MessageBranch & {
   stopDetails?: StopDetails
   /** 最近一次请求的用量，续写后更新 */
   usage?: MessageUsage
+  /** 本次请求使用的摘要，按覆盖的回复 ID 关联压缩前后的用量。 */
+  contextSummaryId?: string
+  estimatedTokenCostCny?: TokenCostEstimate
   error?: {
     /** upload：发送前补传附件失败，请求没有发出 */
     kind: ApiErrorKind | 'upload'
@@ -114,6 +129,8 @@ export type Session = {
   messages: Message[]
   /** undefined 表示线性消息列表；null 表示空会话。 */
   rootMessageId?: string | null
+  /** 摘要作为请求上下文存储，会话消息树保留原文。 */
+  contextSummaries?: ContextSummary[]
 }
 
 /** 会话列表元数据；消息只在打开会话时加载。 */

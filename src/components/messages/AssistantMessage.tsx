@@ -4,7 +4,7 @@ import { memo } from 'react'
 import { IconRefreshOutline16, IconWarningOutline16 } from '../base/icons.js'
 import { describeReply } from '../../services/chat/describe.js'
 import { canContinueReply } from '../../services/chat/reply.js'
-import { continueReply, regenerateReply } from '../../services/chat/store.js'
+import { continueReply, regenerateReply, useChatStore } from '../../services/chat/store.js'
 import { stopReadAloud } from '../../services/speech/readAloud.js'
 import type { AssistantMessage as AssistantMessageType } from '../../services/chat/types.js'
 import { openSettings } from '../settings/settingsDialogState.js'
@@ -44,6 +44,7 @@ export const AssistantMessage = memo(function AssistantMessage({
   onSelectVersion: SelectMessageVersion
 }) {
   const t = useTranslate()
+  const compacting = useChatStore((state) => state.compacting[sessionId] === message.id)
   const view = useReplyView(message, streaming)
   const panelEntry = useSearchPanel((state) => state.entry)
   const notice = streaming ? null : describeReply(message)
@@ -54,7 +55,8 @@ export const AssistantMessage = memo(function AssistantMessage({
     .filter(Boolean)
     .join('\n\n')
   const copyText = responseText || notice?.text
-  const waiting = streaming && view.steps.length === 0 && !view.answer && !message.thinking
+  const waiting =
+    streaming && !compacting && view.steps.length === 0 && !view.answer && !message.thinking
   const summaryEntry = `${message.id}-summary`
   return (
     <div className={styles.message}>
@@ -62,7 +64,7 @@ export const AssistantMessage = memo(function AssistantMessage({
         <ReplyArea
           message={message}
           view={view}
-          streaming={streaming}
+          streaming={streaming && !compacting}
           hasResponse={!!responseText}
         />
       )}
@@ -75,6 +77,11 @@ export const AssistantMessage = memo(function AssistantMessage({
           disableLink={false}
           sources={view.sources}
         />
+      ) : null}
+      {compacting ? (
+        <div role="status" className={clsx(styles.waiting, styles.compacting)}>
+          {t('compactingConversation')}
+        </div>
       ) : null}
       {waiting ? (
         <div className={styles.waiting}>

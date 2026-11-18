@@ -18,6 +18,11 @@
   height: 34px;
 }
 
+.compacting {
+  color: var(--dsw-alias-label-dimmed);
+  font-size: 14px;
+}
+
 .waitingDot {
   width: 6px;
   height: 6px;

@@ -54,6 +54,27 @@ export const isRetryableApiError = (error: unknown): boolean => {
   )
 }
 
+const CONTEXT_LIMIT_CODES = new Set([
+  'context_length_exceeded',
+  'context_window_exceeded',
+  'prompt_too_long',
+])
+
+const CONTEXT_LIMIT_MESSAGES = [
+  /context[_ ](?:length|window|limit)(?:_exceeded|.{0,60}\b(?:exceed\w*|overflow|too long)\b)/i,
+  /\bexceed\w*\b.{0,50}\bcontext (?:length|window|limit)\b/i,
+  /(?:max|maximum) (?:allowed )?context (?:length|size|window)/i,
+  /\bprompt (?:is )?too long\b/i,
+  /上下文(?:长度|窗口)?.{0,12}(?:超过|超长|超限|不足)/,
+]
+
+/** 仅对明确的上下文超限启用压缩重试。 */
+export const isContextLimitError = (error: unknown): boolean =>
+  error instanceof ApiError &&
+  (error.kind === 'stream' || error.status === 400 || error.status === 413) &&
+  (CONTEXT_LIMIT_CODES.has(error.code ?? '') ||
+    CONTEXT_LIMIT_MESSAGES.some((pattern) => pattern.test(error.message)))
+
 /** 服务端判定附件失效的情况：本地有原件时重新上传即可自愈 */
 export type FileErrorCode = 'fileIdMissing' | 'fileDataMissing' | 'invalidFileId'
 

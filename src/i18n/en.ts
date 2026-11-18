@@ -34,6 +34,7 @@ export const en = {
   editMessage: 'Edit message',
   regenerate: 'Regenerate',
   continueGenerating: 'Continue',
+  compactingConversation: 'Summarizing earlier conversation…',
   changeApiKey: 'Change API Key',
   topUp: 'Top up',
   messageSearchSummary: '1 web page',

@@ -176,6 +176,7 @@ export type CreateMessageRequest = {
   model: ChatModel
   system: string
   messages: MessageParam[]
+  max_tokens?: number
   thinking: { type: 'enabled' | 'disabled' }
   tools: (DeepseekWebSearchTool | DeepseekReadUrlTool)[]
   safety_check: { level: 'high' }

@@ -185,8 +185,7 @@ export const canContinueReply = (reply: AssistantMessage): boolean => {
     return false
   }
   return (
-    reply.status === 'stopped' ||
-    (reply.status === 'done' && reply.stopReason === 'max_tokens')
+    reply.status === 'stopped' || (reply.status === 'done' && reply.stopReason === 'max_tokens')
   )
 }
 
@@ -305,9 +304,18 @@ export const toRequestMessages = (
   question: UserMessage,
   prefix?: AssistantMessage,
   thinking = prefix?.thinking ?? false,
-  latestReminder?: string
+  latestReminder?: string,
+  contextSummary?: string
 ): MessageParam[] => {
-  const messages: MessageParam[] = []
+  const messages: MessageParam[] = contextSummary
+    ? [
+        {
+          role: 'user',
+          content: 'The following recap provides context from earlier in this conversation.',
+        },
+        { role: 'assistant', content: [{ type: 'text', text: contextSummary }] },
+      ]
+    : []
   let previousReminder: string | undefined
   const appendReminder = (reminder: string | undefined) => {
     // 仅在当前分支首次出现或内容变化时插入快照；缺少快照的消息保持原有内容。
