@@ -32,16 +32,10 @@
   font-size: 14px;
 }
 
-.loadingView {
+.loadingState {
   position: absolute;
   inset: 0;
   display: flex;
-  flex-direction: column;
-}
-
-.loadingState {
-  display: flex;
-  flex: 1;
   flex-direction: column;
   align-items: center;
   justify-content: center;

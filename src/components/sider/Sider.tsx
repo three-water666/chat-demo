@@ -15,7 +15,7 @@ import { closeMobileSider, useMobileSider } from './mobileSiderState.js'
 import { SessionItem } from './SessionItem.js'
 import styles from './Sider.module.css'
 
-/** 展开的侧边栏：名称与收起按钮、开启新对话、按时间分组的会话列表、底部设置；移动端放在抽屉里，收起按钮关闭抽屉 */
+/** 展开的侧边栏：顶部操作与按时间分组的会话列表；移动端放在抽屉里。 */
 export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
   const t = useTranslate()
   const sessions = useChatStore((state) => state.sessions)
@@ -24,6 +24,7 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
   const groups = useMemo(() => groupSessions(sessions, now, t), [sessions, now, t])
   const [deleting, setDeleting] = useState<SessionSummary | null>(null)
   const [deletePending, setDeletePending] = useState(false)
+  const actionSize = mobile ? 'xl' : 'm'
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>
@@ -51,29 +52,40 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
 
   return (
     <div className={clsx(styles.sider, mobile && styles.mobile)}>
-      <div className={styles.top}>
-        <div className={styles.appName}>{t('appName')}</div>
-        <IconButton
+      <div className={styles.toolbar}>
+        <Button
+          variant="outlined"
           size="m"
+          className={styles.newChat}
+          onClick={() => {
+            newChat()
+            closeMobileSider()
+          }}
+        >
+          <NewChatIcon />
+          <span className={styles.newChatLabel}>{t('newChat')}</span>
+        </Button>
+        <IconButton
+          size={actionSize}
+          tone="primary"
+          icon={<IconSettingsOutline16 />}
+          tooltip={t('settings')}
+          tooltipPlacement="bottom"
+          onClick={() => {
+            closeMobileSider()
+            openSettings('general')
+          }}
+        />
+        <IconButton
+          size={actionSize}
+          tone="primary"
           icon={<IconPanelLeftOutline16 />}
           tooltip={t('collapseSiderbarButton')}
           tooltipPlacement="bottom"
+          aria-expanded={true}
           onClick={() => (mobile ? closeMobileSider() : setSiderCollapsed(true))}
         />
       </div>
-      <button
-        type="button"
-        className={styles.newChat}
-        onClick={() => {
-          newChat()
-          closeMobileSider()
-        }}
-      >
-        <span className={styles.newChatIcon}>
-          <NewChatIcon />
-        </span>
-        {t('newChat')}
-      </button>
       <div className={styles.listWrap}>
         <div className={styles.list}>
           {groups.map((group) => (
@@ -90,14 +102,6 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
             </div>
           ))}
         </div>
-      </div>
-      <div className={styles.bottom}>
-        <button type="button" className={styles.settings} onClick={() => openSettings('general')}>
-          <span className={styles.settingsIcon}>
-            <IconSettingsOutline16 />
-          </span>
-          <span className={styles.settingsLabel}>{t('settings')}</span>
-        </button>
       </div>
       {deleting ? (
         <Modal

@@ -21,7 +21,11 @@ declare const styles: {
   readonly "themeOptionSelected": string;
   readonly "description": string;
   readonly "error": string;
+  readonly "success": string;
   readonly "apiKey": string;
+  readonly "apiKeyHeading": string;
+  readonly "apiKeyLink": string;
+  readonly "apiKeyFeedback": string;
   readonly "apiKeySaved": string;
   readonly "apiKeyInput": string;
   readonly "apiKeyMask": string;

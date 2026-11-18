@@ -1,3 +1,4 @@
+import clsx from 'clsx'
 import { useState } from 'react'
 import { IconEditOutline16 } from '../base/icons.js'
 import { useSettings } from '../../services/settings.js'
@@ -22,11 +23,22 @@ export const ApiKeyField = ({ editor }: { editor: ApiKeyEditor }) => {
   const t = useTranslate()
   const isMobile = useIsMobile()
   const { apiKey, editing, setEditing, form, showInput } = editor
+  const feedback = showInput ? form.error : form.verified ? t('apiKeyVerificationSucceeded') : null
 
   return (
     <div className={styles.cell}>
       <div className={styles.apiKey}>
-        <div className={styles.label}>{t('apiKeyStart')}</div>
+        <div className={styles.apiKeyHeading}>
+          <div className={styles.label}>{t('apiKeyStart')}</div>
+          <a
+            className={styles.apiKeyLink}
+            href="https://platform.deepseek.com/usage"
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t('getApiKey')}
+          </a>
+        </div>
         {apiKey && !editing ? (
           <div className={styles.apiKeySaved}>
             <span className={styles.apiKeyMask}>{'*'.repeat(apiKey.length)}</span>
@@ -77,7 +89,12 @@ export const ApiKeyField = ({ editor }: { editor: ApiKeyEditor }) => {
             ) : null}
           </div>
         )}
-        {showInput && form.error ? <div className={styles.error}>{form.error}</div> : null}
+        <div
+          className={clsx(styles.apiKeyFeedback, showInput ? styles.error : styles.success)}
+          role="status"
+        >
+          {feedback}
+        </div>
       </div>
     </div>
   )

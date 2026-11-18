@@ -4,19 +4,24 @@ import { classifyApiError } from '../../services/api/errors.js'
 import { setApiKey } from '../../services/settings.js'
 import { useTranslate } from '../../i18n/index.js'
 
+type Verification =
+  | { status: 'idle' | 'verifying' | 'success' }
+  | { status: 'error'; cause: unknown }
+
 /** 输入 API Key 后先用 GET /models 校验，通过才保存 */
 export const useApiKeyForm = (onSaved?: () => void) => {
   const t = useTranslate()
   const [value, setValue] = useState('')
-  const [verifying, setVerifying] = useState(false)
-  const [failure, setFailure] = useState<{ cause: unknown } | null>(null)
-  const cause = failure?.cause
-  const error =
-    failure === null
-      ? null
-      : classifyApiError(cause) === 'unauthorized'
+  const [verification, setVerification] = useState<Verification>({ status: 'idle' })
+  const verifying = verification.status === 'verifying'
+  let error: string | null = null
+  if (verification.status === 'error') {
+    const { cause } = verification
+    const condition = classifyApiError(cause)
+    error =
+      condition === 'unauthorized'
         ? t('apiKeyInvalid')
-        : classifyApiError(cause) === 'network'
+        : condition === 'network'
           ? t('commonNetworkErrorToast')
           : t('apiKeyVerificationFailed', {
               message:
@@ -26,25 +31,24 @@ export const useApiKeyForm = (onSaved?: () => void) => {
                     ? cause.message
                     : String(cause),
             })
+  }
 
   const submit = async () => {
     const apiKey = value.trim()
     if (!apiKey || verifying) {
       return
     }
-    setVerifying(true)
-    setFailure(null)
+    setVerification({ status: 'verifying' })
     try {
       await verifyApiKey(apiKey)
       setApiKey(apiKey)
       setValue('')
       onSaved?.()
+      setVerification({ status: 'success' })
     } catch (e) {
-      setFailure({ cause: e })
-    } finally {
-      setVerifying(false)
+      setVerification({ status: 'error', cause: e })
     }
   }
 
-  return { value, setValue, verifying, error, submit }
+  return { value, setValue, verifying, verified: verification.status === 'success', error, submit }
 }
