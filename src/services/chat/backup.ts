@@ -1,15 +1,20 @@
 import { formatDate } from '../../utils/format.js'
+import { createId } from '../../utils/id.js'
 import * as db from './db.js'
-import { replaceHistory, useChatStore } from './store.js'
+import type { HistoryArchive } from './history/importArchive.js'
+import { addHistorySessions, deleteAllHistory, useChatStore } from './store.js'
 import type { Session } from './types.js'
 
 export { BackupError } from './history/errors.js'
+export type { HistoryArchive } from './history/importArchive.js'
 
-// 导入、导出与全部删除串行处理，避免读取归档时数据被清空或两个替换事务交错。
+// 导入、导出与全部删除串行处理；支持 Web Locks 时在同源标签页之间也共用队列。
 let backupQueue: Promise<unknown> = Promise.resolve()
 
 const enqueueBackup = <T>(run: () => Promise<T>): Promise<T> => {
-  const task = backupQueue.then(run)
+  const task = backupQueue.then(() =>
+    navigator.locks ? navigator.locks.request('chat-demo-history', run) : run()
+  )
   backupQueue = task.catch(() => {})
   return task
 }
@@ -39,19 +44,38 @@ export const exportHistory = (): Promise<{ name: string; blob: Blob }> =>
     return { name: backupFileName(now), blob }
   })
 
-/**
- * 确认覆盖后调用：先检查 ZIP 格式与版本，校验失败时保留正在生成的回答；
- * 通过后从 ZIP 流式写入暂存，成功才替换原有会话与图片原件。返回导入的会话数。
- */
-export const importHistory = (file: File): Promise<number> =>
+export const previewHistory = async (
+  source: Blob,
+  signal: AbortSignal
+): Promise<HistoryArchive> => {
+  const { inspectArchive } = await import('./history/importArchive.js')
+  signal.throwIfAborted()
+  return inspectArchive(source, signal)
+}
+
+/** 仅暂存需要导入的会话。提交时再与正式库核对，返回实际新增的数量。 */
+export const importHistory = (
+  archive: HistoryArchive,
+  selectedIds: ReadonlySet<string>
+): Promise<number> =>
   enqueueBackup(async () => {
-    const { checkArchiveFormat, importArchive } = await import('./history/importArchive.js')
-    await checkArchiveFormat(file)
-    return replaceHistory(() => importArchive(file))
+    const localIds = new Set(useChatStore.getState().sessions.map((session) => session.id))
+    const newIds = new Set([...selectedIds].filter((id) => !localIds.has(id)))
+    if (newIds.size === 0) {
+      return 0
+    }
+    const { stageArchiveSessions } = await import('./history/importArchive.js')
+    if (navigator.locks) {
+      await db.clearStaging()
+    }
+    const batchId = createId()
+    try {
+      const counts = await stageArchiveSessions(archive, newIds, batchId)
+      return await addHistorySessions(batchId, counts)
+    } catch (error) {
+      await db.clearStaging(batchId).catch(db.reportStorageError('clear unfinished history import'))
+      throw error
+    }
   })
 
-/** 确认删除后调用：以空历史原子替换全部本地会话与附件，保留 API Key 和其他设置。 */
-export const clearHistory = (): Promise<void> =>
-  enqueueBackup(async () => {
-    await replaceHistory(async () => {})
-  })
+export const clearHistory = (): Promise<void> => enqueueBackup(deleteAllHistory)

@@ -3,6 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from '@rspack/cli'
 import { rspack, type Configuration } from '@rspack/core'
+import { historyDownloadRelay, serveHistoryDownload } from './scripts/historyDownload.js'
 
 const dev = process.env.NODE_ENV !== 'production'
 const targets = ['chrome >= 105', 'edge >= 105', 'safari >= 16', 'firefox >= 110']
@@ -80,13 +81,31 @@ export const createConfig = ({
       scriptLoading: 'defer',
       meta: { 'application-version': version },
     }),
-    new rspack.DefinePlugin({ __API_ORIGIN__: JSON.stringify(apiOrigin) }),
+    new rspack.DefinePlugin({
+      __API_ORIGIN__: JSON.stringify(apiOrigin),
+      __HISTORY_DOWNLOAD_RELAY__: JSON.stringify(dev ? historyDownloadRelay : null),
+    }),
     new rspack.CopyRspackPlugin({
       patterns: [{ from: path.resolve(root, 'LICENSE'), to: 'LICENSE', toType: 'file' }],
     }),
   ],
   performance: { hints: false },
-  devServer: { port: 8090, ...devServer },
+  devServer: {
+    port: 8090,
+    ...devServer,
+    setupMiddlewares(middlewares, server) {
+      const configured =
+        (devServer && devServer.setupMiddlewares?.(middlewares, server)) || middlewares
+      if (dev) {
+        configured.push({
+          name: 'history-download',
+          path: historyDownloadRelay.path,
+          middleware: serveHistoryDownload,
+        })
+      }
+      return configured
+    },
+  },
 })
 
 // eslint-disable-next-line import/no-default-export

@@ -13,7 +13,7 @@ declare const styles: {
   readonly "balanceAmount": string;
   readonly "balanceActions": string;
   readonly "balanceLink": string;
-  readonly "uploadButton": string;
+  readonly "historyImportCell": string;
   readonly "locationCell": string;
   readonly "locationSelectors": string;
   readonly "provinceSelect": string;
@@ -39,8 +39,6 @@ declare const styles: {
   readonly "confirm": string;
   readonly "cellButton": string;
   readonly "mobileConfirm": string;
-  readonly "importConfirm": string;
-  readonly "importConfirmText": string;
   readonly "deleteConfirm": string;
   readonly "deleteActions": string;
 };

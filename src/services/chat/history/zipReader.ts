@@ -17,7 +17,7 @@ const invalid = (): never => {
 }
 
 /** 本地文件头签名 PK\x03\x04，用于在解析前区分 ZIP 与其他文件。 */
-export const isZipFile = async (file: File) => {
+export const isZipFile = async (file: Blob) => {
   const bytes = new Uint8Array(await file.slice(0, 4).arrayBuffer())
   return bytes.length === 4 && bytes.every((byte, index) => byte === [0x50, 0x4b, 3, 4][index])
 }
@@ -32,7 +32,7 @@ const crcTable = Uint32Array.from({ length: 256 }, (_, value) => {
   return crc >>> 0
 })
 
-const readBytes = async (file: File, start: number, length: number) => {
+const readBytes = async (file: Blob, start: number, length: number) => {
   if (start < 0 || length < 0 || start + length > file.size) {
     invalid()
   }
@@ -85,7 +85,10 @@ type Entry = {
   offset: number
 }
 
-const readDirectory = async (file: File): Promise<{ entries: Entry[]; offset: number }> => {
+const readDirectory = async (
+  file: Blob,
+  signal?: AbortSignal
+): Promise<{ entries: Entry[]; offset: number }> => {
   if (file.size < 22) {
     invalid()
   }
@@ -121,6 +124,7 @@ const readDirectory = async (file: File): Promise<{ entries: Entry[]; offset: nu
   const paths = new Set<string>()
   let cursor = 0
   for (let index = 0; index < count; index++) {
+    signal?.throwIfAborted()
     if (cursor + 46 > size) {
       invalid()
     }
@@ -177,7 +181,7 @@ const readDirectory = async (file: File): Promise<{ entries: Entry[]; offset: nu
   return { entries: entries.sort((a, b) => a.offset - b.offset), offset }
 }
 
-const readEntryOffset = async (file: File, entry: Entry, boundary: number) => {
+const readEntryOffset = async (file: Blob, entry: Entry, boundary: number) => {
   if (entry.offset + 30 > boundary) {
     invalid()
   }
@@ -234,19 +238,16 @@ export type ArchiveEntry = {
   stream: AsyncIterable<Uint8Array>
 }
 
-/**
- * 按条目在文件中的物理顺序逐条、逐块解压，跳过目录条目。
- * 调用方必须消费完当前条目的数据，再请求下一个条目。
- */
-export async function* readArchive(file: File): AsyncGenerator<ArchiveEntry> {
-  const directory = await readDirectory(file)
+/** 按物理顺序校验条目头；读取条目数据时才解压并校验内容。 */
+export async function* readArchive(file: Blob, signal?: AbortSignal): AsyncGenerator<ArchiveEntry> {
+  const directory = await readDirectory(file, signal)
   for (const [index, entry] of directory.entries.entries()) {
+    signal?.throwIfAborted()
     const boundary = directory.entries[index + 1]?.offset ?? directory.offset
     const start = await readEntryOffset(file, entry, boundary)
     if (entry.path.endsWith('/')) {
       continue
     }
-    let completed = false
     const stream = async function* (): AsyncGenerator<Uint8Array> {
       let written = 0
       let crc = 0xffffffff
@@ -289,12 +290,8 @@ export async function* readArchive(file: File): AsyncGenerator<ArchiveEntry> {
       if (written !== entry.size || (crc ^ 0xffffffff) >>> 0 !== entry.crc) {
         invalid()
       }
-      completed = true
     }
-    yield { path: entry.path, size: entry.size, stream: stream() }
-    if (!completed) {
-      invalid()
-    }
+    yield { path: entry.path, size: entry.size, stream: { [Symbol.asyncIterator]: stream } }
   }
 }
 
@@ -305,12 +302,4 @@ export const readEntry = async (entry: ArchiveEntry): Promise<Blob> => {
     parts.push(new Blob([chunk as Uint8Array<ArrayBuffer>]))
   }
   return new Blob(parts)
-}
-
-/** 不需要的条目也要读完，以校验大小与 CRC。 */
-export const skipEntry = async (entry: ArchiveEntry): Promise<void> => {
-  const reader = entry.stream[Symbol.asyncIterator]()
-  while (!(await reader.next()).done) {
-    // 丢弃数据。
-  }
 }

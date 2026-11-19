@@ -133,8 +133,13 @@
   text-decoration: none;
 }
 
-.uploadButton {
-  padding: 0 13px;
+.historyImportCell {
+  flex-wrap: wrap;
+}
+
+.historyImportCell .text {
+  flex-basis: 100%;
+  padding-right: 0;
 }
 
 .locationCell {
@@ -516,15 +521,6 @@
     opacity: 0.45;
     cursor: default;
   }
-}
-
-.importConfirm {
-  padding-top: 26px;
-  padding-bottom: 24px;
-}
-
-.importConfirmText {
-  color: var(--dsw-alias-label-primary);
 }
 
 .deleteConfirm {

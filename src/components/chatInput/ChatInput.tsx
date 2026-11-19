@@ -114,7 +114,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
     })
   })
 
-  // 欢迎页导入后会话 ID 不变，不能依赖卸载取消语音；订阅开始事件也覆盖快速完成的导入。
+  // 在欢迎页清空历史仍需主动取消语音；订阅开始事件可覆盖快速完成的删除。
   const cancelVoice = voice.cancel
   useEffect(
     () =>

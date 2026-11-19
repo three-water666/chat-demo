@@ -17,11 +17,12 @@ chat_sessions/{session_id}_files/{file_id}_{file_name}  全部图片原件
 
 可选字段允许缺省；时间接受以 `Z` 结尾、带可选小数秒的 UTC 时间。校验后只保留已定义字段，未知类型或无法解析的内容片段直接丢弃；容器和元数据字段不合法仍会导致导入失败。
 
-## 导入与替换
+## 选择并追加导入
 
-1. 用户确认覆盖后，先读取首个条目检查格式与版本；不符合时直接失败，不中止正在生成的回答。
-2. 检查通过后停止生成，导入期间禁止修改会话。逐条解析会话并写入 IndexedDB 暂存区，按 `FILE.is_image` 保留图片身份，再读取图片原件并回填 MIME。图片按文件 ID 去重；字节识别仅补充具体 MIME，无法识别时仍按图片处理。
-3. 校验索引与会话一一对应、消息树和 ZIP 完整性后，在同一个事务中用暂存内容替换全部本地会话与附件。校验或提交失败时保留原有记录；中断遗留的暂存在下次导入前清理。
+1. 选择本地 ZIP 或粘贴 HTTPS 下载链接。开发服务器为 DeepSeek 官方华为云导出链接提供同源下载，静态版依赖下载服务器允许跨域读取。
+2. 检查 ZIP 条目结构、版本和会话索引，按更新时间显示会话列表。新会话默认勾选，可以按标题筛选，已有会话按 ID 标记。
+3. 确认后逐条解压选中的新会话及关联图片，校验并写入 IndexedDB 暂存区。图片按文件 ID 去重，具体 MIME 由原件字节识别，图片身份沿用 `FILE.is_image`。
+4. 在一个事务中追加新会话、会话摘要和相应的图片原件，跳过正式库中已有的 ID。期间可以继续接收正在生成的回复。校验或提交失败时，原有会话与附件会保留。
 
 消息树以 `id` / `parent_id` 还原，父消息 ID 必须小于子消息 ID、角色交替、根为提问。`current_message_id` 决定当前分支；其他节点默认选中 ID 最大的子消息。缺失原件的附件保留文件名和大小，不进入后续请求；有原件的导入图片在首次用于请求时上传。
 
@@ -54,7 +55,7 @@ chat_sessions/{session_id}_files/{file_id}_{file_name}  全部图片原件
 | ------------------------------------------------------------------------------ | ------------------------------ |
 | [format.ts](./format.ts)、[schema.ts](./schema.ts)                             | 归档类型与字段校验             |
 | [toLocal.ts](./toLocal.ts)、[toArchive.ts](./toArchive.ts)                     | 归档与本地消息转换             |
-| [importArchive.ts](./importArchive.ts)、[exportArchive.ts](./exportArchive.ts) | 条目读取、暂存与归档组装       |
+| [importArchive.ts](./importArchive.ts)、[exportArchive.ts](./exportArchive.ts) | 会话预览、暂存与归档组装       |
 | [zipReader.ts](./zipReader.ts)、[zipWriter.ts](./zipWriter.ts)                 | ZIP 读写及路径、大小、CRC 校验 |
 | [../backup.ts](../backup.ts)                                                   | 导入导出入口与串行队列         |
 

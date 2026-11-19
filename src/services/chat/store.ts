@@ -62,7 +62,7 @@ const titleRequests = new Set<AbortController>()
 type ChatState = {
   ready: boolean
   initError: boolean
-  /** 历史导入或全部删除期间锁定交互，提交成功前仍展示原有记录。 */
+  /** 全部删除期间锁定交互，提交成功前仍展示原有记录。 */
   importingHistory: boolean
   /** 仅列表元数据，按 updatedAt 降序；流式消息更新不会改变此数组。 */
   sessions: SessionSummary[]
@@ -385,34 +385,45 @@ const waitForIdle = (sessionId?: string) =>
     })
   })
 
-/**
- * 替换历史对话：先写入暂存，成功后原子替换旧记录；写入为空即删除全部会话与附件。
- * 期间停止生成并禁止修改会话；失败时清除暂存，保留原有记录。
- */
-export const replaceHistory = async (write: () => Promise<void>): Promise<number> => {
+/** 提交导入后仅更新列表；当前会话、草稿和生成中的回复继续使用原有状态。 */
+export const addHistorySessions = async (
+  batchId: string,
+  expected: db.StagingCounts
+): Promise<number> => {
+  await initChat()
+  const localIds = new Set(get().sessions.map((session) => session.id))
+  const added = await db.commitStaging(batchId, expected, localIds)
+  if (added.length > 0) {
+    set((state) => {
+      const currentIds = new Set(state.sessions.map((session) => session.id))
+      return {
+        sessions: sortSessions([
+          ...state.sessions,
+          ...added.filter((session) => !currentIds.has(session.id)),
+        ]),
+      }
+    })
+  }
+  return added.length
+}
+
+/** 删除全部会话与附件。期间停止生成，事务失败时保留原有记录。 */
+export const deleteAllHistory = async (): Promise<void> => {
   if (get().importingHistory) {
-    throw new Error('History replacement is already in progress')
+    throw new Error('History deletion is already in progress')
   }
   set({ importingHistory: true })
   try {
     for (const controller of Object.values(get().streaming)) {
       controller.abort()
     }
-    // 已开始的单条删除先同步到内存，避免本次替换失败后列表残留已被删除的记录。
+    // 已开始的单条删除先同步到内存，避免失败后列表残留已被删除的记录。
     await Promise.all(deletionTasks)
     historyEpoch += 1
     initTask = undefined
     sessionLoads.clear()
     await waitForIdle()
-    await db.clearStaging()
-    let summaries: SessionSummary[]
-    try {
-      await write()
-      summaries = await db.commitStaging()
-    } catch (error) {
-      await db.clearStaging().catch(db.reportStorageError('clear unfinished history replacement'))
-      throw error
-    }
+    await db.clearStoredHistory()
     sessionAccess.clear()
     unsavedSessions.clear()
     pendingFiles.clear()
@@ -420,18 +431,17 @@ export const replaceHistory = async (write: () => Promise<void>): Promise<number
     set({
       ready: true,
       initError: false,
-      sessions: sortSessions(summaries),
+      sessions: [],
       sessionCache: {},
       sessionLoadErrors: {},
       sessionSaveErrors: {},
       activeId: null,
     })
-    return summaries.length
   } finally {
     set({ importingHistory: false })
     retrySaveSessions()
     const { activeId, ready } = get()
-    // 替换失败时恢复被取消的详情读取，原有记录继续可用。
+    // 删除失败时恢复被取消的详情读取。
     if (activeId !== null) {
       void ensureSessionLoaded(activeId)
     } else if (!ready) {
