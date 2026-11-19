@@ -97,7 +97,7 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
           tooltipPlacement="bottom"
           onClick={() => {
             closeMobileSider()
-            openSettings('general')
+            openSettings()
           }}
         />
         <IconButton

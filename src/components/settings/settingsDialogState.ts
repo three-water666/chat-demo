@@ -7,10 +7,10 @@ export type SettingsSection = 'api' | 'general' | 'data'
 /** 设置弹窗：侧边栏、没有 API Key 时的操作与 401 提示都可以打开；section 为打开时选中的分组 */
 export const useSettingsDialog = create(() => ({
   open: false,
-  section: 'general' as SettingsSection,
+  section: 'api' as SettingsSection,
 }))
 
-export const openSettings = (section: SettingsSection) =>
+export const openSettings = (section: SettingsSection = 'api') =>
   useSettingsDialog.setState({ open: true, section })
 
 export const closeSettings = () => useSettingsDialog.setState({ open: false })
