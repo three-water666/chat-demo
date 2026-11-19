@@ -29,6 +29,8 @@ export const App = () => {
   const t = useTranslate()
   const isMobile = useIsMobile()
   const locale = useSettings((state) => state.locale)
+  const pageTitle = t('appTitle')
+  const pageDescription = t('appDescription')
   // 移动端侧边栏以独立抽屉管理开合状态
   const siderCollapsed = useSettings((state) => state.siderCollapsed) && !isMobile
   const ready = useChatStore((state) => state.ready)
@@ -53,7 +55,9 @@ export const App = () => {
 
   useEffect(() => {
     document.documentElement.lang = locale
-  }, [locale])
+    document.title = pageTitle
+    document.querySelector('meta[name="description"]')?.setAttribute('content', pageDescription)
+  }, [locale, pageTitle, pageDescription])
 
   // 文件数、存储空间达到上限时，附件上只显示「上传失败」，原因用 toast 说明
   useEffect(() => onUploadNotice(showToast), [])

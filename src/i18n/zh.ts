@@ -1,4 +1,7 @@
 export const zh = {
+  appName: '循问',
+  appTitle: '循问 · 深度对话',
+  appDescription: '循问是一款接入 DeepSeek API 的独立第三方聊天客户端。',
   welcomeMessageChat250808: '今天有什么可以帮到你？',
   contentCaveat: '内容由 AI 生成，请仔细甄别',
   expandSiderbarButton: '打开边栏',
@@ -114,7 +117,7 @@ export const zh = {
   avatarMenuSettingsDialogThemeSelectLightOption: '浅色',
   avatarMenuSettingsDialogThemeSelectDarkOption: '深色',
   avatarMenuSettingsDialogThemeSelectSystemOption: '跟随系统',
-  apiKeyStart: '输入 API Key 开始使用',
+  apiKeyStart: '输入 DeepSeek API Key 开始使用',
   apiKeyNoticeTitle: '请妥善保管 API Key',
   apiKeyNoticeDescription:
     'API Key 用来调用 DeepSeek 和查询账户余额，会保存在当前浏览器。请勿分享给他人，或放在公开代码和截图中。',

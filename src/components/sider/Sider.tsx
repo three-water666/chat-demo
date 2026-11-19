@@ -21,6 +21,8 @@ import { SessionItem } from './SessionItem.js'
 import { SessionSearchDialog } from './SessionSearchDialog.js'
 import styles from './Sider.module.css'
 
+const appIcon = new URL('../../xunwen-favicon.png', import.meta.url).href
+
 /** 展开的侧边栏：顶部操作与按时间分组的会话列表；移动端放在抽屉里。 */
 export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
   const t = useTranslate()
@@ -61,6 +63,20 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
 
   return (
     <div className={clsx(styles.sider, mobile && styles.mobile)}>
+      <div className={styles.top}>
+        <div className={styles.brand}>
+          <img className={styles.appIcon} src={appIcon} alt="" width={26} height={26} />
+          <div className={styles.appName}>{t('appName')}</div>
+        </div>
+        <IconButton
+          size={actionSize}
+          icon={<IconPanelLeftOutline16 />}
+          tooltip={t('collapseSiderbarButton')}
+          tooltipPlacement="bottom"
+          aria-expanded={true}
+          onClick={() => (mobile ? closeMobileSider() : setSiderCollapsed(true))}
+        />
+      </div>
       <div className={styles.toolbar}>
         <Button
           variant="outlined"
@@ -95,14 +111,6 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
             searchButtonRef.current = event.currentTarget
             setSearchOpen(true)
           }}
-        />
-        <IconButton
-          size={actionSize}
-          icon={<IconPanelLeftOutline16 />}
-          tooltip={t('collapseSiderbarButton')}
-          tooltipPlacement="bottom"
-          aria-expanded={true}
-          onClick={() => (mobile ? closeMobileSider() : setSiderCollapsed(true))}
         />
       </div>
       <div className={styles.listWrap}>

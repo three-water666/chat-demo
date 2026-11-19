@@ -1,6 +1,9 @@
 import type { zh } from './zh.js'
 
 export const en = {
+  appName: 'Xunwen',
+  appTitle: 'Xunwen · AI Chat',
+  appDescription: 'Xunwen is an independent, third-party chat client for the DeepSeek API.',
   welcomeMessageChat250808: 'How can I help you?',
   contentCaveat: 'AI-generated, for reference only',
   expandSiderbarButton: 'Open sidebar',
@@ -119,7 +122,7 @@ export const en = {
   avatarMenuSettingsDialogThemeSelectLightOption: 'Light',
   avatarMenuSettingsDialogThemeSelectDarkOption: 'Dark',
   avatarMenuSettingsDialogThemeSelectSystemOption: 'System',
-  apiKeyStart: 'Enter an API Key to get started',
+  apiKeyStart: 'Enter your DeepSeek API Key',
   apiKeyNoticeTitle: 'Keep your API Key private',
   apiKeyNoticeDescription:
     'Your API Key authorizes DeepSeek calls and balance checks. It is stored in this browser. Keep it out of shared messages, public code, and screenshots.',
